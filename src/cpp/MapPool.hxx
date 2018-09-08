@@ -52,7 +52,7 @@ namespace c0de4un
 		*/
 		explicit MapPool( ) noexcept
 			: itemsMap( ),
-			accessMutex( )
+			itemsMutex( )
 		{
 		}
 
@@ -76,7 +76,7 @@ namespace c0de4un
 		{
 
 			// Lock
-			
+			std::unique_lock<std::mutex> lock_l( itemsMutex );
 
 			// Get Items
 			std::shared_ptr<vector_t> itemsVector_sp( getItems( pKey, false ) );
@@ -86,6 +86,135 @@ namespace c0de4un
 
 			// Return Item & Unlock
 			return( item_sp );
+
+		}
+
+		/*
+		 * Puts item of given type.
+		 *
+		 * @thread_safety - thread-safe, synchronization (thread-lock) used.
+		 * @param pKey - Item-Type.
+		 * @param pItem - Item.
+		*/
+		void putItem( const K & pKey, std::shared_ptr<V> pItem ) noexcept
+		{
+
+			// Lock
+			std::unique_lock<std::mutex> lock_l( itemsMutex );
+
+			// Get Items
+			std::shared_ptr<vector_t> itemsVector_sp( getItems( pKey, true ) ); // Create new vector_t if needed.
+
+			// Add Item to Collection
+			itemsVector_sp->push_back( pItem ); // For better performance, reusing shared_ptr without deletion can be better.
+
+		}
+
+		// -------------------------------------------------------- \\
+
+	private:
+
+		// -------------------------------------------------------- \\
+
+		// ===========================================================
+		// Types
+		// ===========================================================
+
+		/* Type-Alias for vector */
+		using vector_t = std::vector<std::shared_ptr<V>>;
+
+		/* Type-Alias for map */
+		using map_t = std::map<K, std::shared_ptr<vector_t>>;
+
+		// ===========================================================
+		// Fields
+		// ===========================================================
+
+		/* Items map */
+		map_t itemsMap;
+
+		/* Mutex to synchronize access */
+		std::mutex itemsMutex;
+
+		// ===========================================================
+		// Constructors & Destructor
+		// ===========================================================
+
+		/* @deleted MapPool const copy constructor */
+		explicit MapPool( const MapPool & ) = delete;
+
+		/* @deleted MapPool const copy '=' operator */
+		MapPool operator=( const MapPool & ) = delete;
+
+		// ===========================================================
+		// Getter & Setter
+		// ===========================================================
+
+		/*
+		 * Searches for items collection of given type.
+		 *
+		 * @thread_safety - not thread-safe, must be called inside of
+		 * the synchronization block (thread-lock).
+		 * @param pKey - Item-Type.
+		 * @param pAllocate - true to create new collection for given type, if none where found.
+		 * @return collection or null.
+		*/
+		std::shared_ptr<vector_t> getItems( const K & pKey, const bool pAllocate ) noexcept
+		{
+
+			// Items Collection
+			std::shared_ptr<vector_t> items_sp( nullptr );
+
+			// Search position
+			const map_t::iterator position = itemsMap.find( pKey );
+
+			// Get
+			if ( position == itemsMap.end( ) )
+			{
+				// Add new type
+				if ( pAllocate )
+				{
+					// Allocate using std::make_shared
+					items_sp = std::make_shared<vector_t>( );
+
+					// Register collection
+					itemsMap.insert( map_t::value_type( pKey, items_sp ) );
+				}
+			}
+			else
+				items_sp = position->second; // Copy-Constructor of smart-pointer
+
+			// Return items
+			return( items_sp );
+
+		}
+
+		/*
+		 * Searches for item within collection.
+		 *
+		 * @thread_safety - not thread-safe, must be called inside of
+		 * the synchronization block (thread-lock).
+		 * @param itemsVector_sp - pointer to collection.
+		 * @return pointer to item or null if none found.
+		*/
+		std::shared_ptr<V> getItem( std::shared_ptr<vector_t> & itemsVector_sp ) noexcept
+		{
+
+			// Cancel
+			if ( itemsVector_sp->empty( ) )
+				return( nullptr );
+
+			// Get Back (Last) Item
+			std::shared_ptr<V> item_sp = itemsVector_sp->back( ); // Get reference
+
+			// Copy pointer-value
+			std::shared_ptr<V> result_sp = std::move( item_sp ); // Transfer ownership
+
+			// Remove Item from Collection
+			itemsVector_sp->pop_back( );
+
+			// Return Item
+			return( result_sp );
 
 		}
 

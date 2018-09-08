@@ -11,7 +11,14 @@
 namespace c0de4un
 {
 
-	
+	/* ObjectTypes - list of types */
+	enum ObjectTypes : unsigned char
+	{
+
+		VEHICLE = 1,
+		TANK = 2
+
+	};
 
 }
 

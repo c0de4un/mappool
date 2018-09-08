@@ -92,14 +92,19 @@ endif ( CMAKE_BUILD_TYPE STREQUAL "Debug" )
 set ( ROOT_PROJECT_SRC_DIR "${CMAKE_SOURCE_DIR}/src/cpp" )
 
 # Set Project Bin-Output Dir
-set ( ROOT_PROJECT_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/${BUILD_TYPE_DIR}/${PLATFORM_DIR}" )
+set ( ROOT_PROJECT_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/bin/${BUILD_TYPE_DIR}/${PLATFORM_DIR}" )
 
 # =================================================================================
 # HEADERS
 # =================================================================================
 
 # Headers
-set ( ROOT_PROJECT_HEADERS "${ROOT_PROJECT_SRC_DIR}/MapPool.hxx" )
+set ( ROOT_PROJECT_HEADERS
+"${ROOT_PROJECT_SRC_DIR}/MapPool.hxx"
+"${ROOT_PROJECT_SRC_DIR}/ObjectTypes.hxx"
+"${ROOT_PROJECT_SRC_DIR}/BaseObject.hxx"
+"${ROOT_PROJECT_SRC_DIR}/Vehicle.hxx"
+"${ROOT_PROJECT_SRC_DIR}/Tank.hxx" )
 
 # =================================================================================
 # SOURCES
