@@ -9,7 +9,6 @@
 #define _C0DE4UN_MAP_POOL_HXX_
 
 #include <mutex>
-#include <memory>
 #include <map>
 #include <vector>
 
@@ -17,23 +16,24 @@ namespace c0de4un
 {
 
 	/*
-	 * MapPool - simple map-based cache (pool) to store objects of same base type.
+	 * MapPool - pool (cache) based on map & vector.
+	 *
+	 * Unlikely static-based type generation (ECS), this class using fixed type as
+	 * key for collection of objects.
+	 *
+	 * @USAGE
+	 * - to retrieve cached item call #getItem. Item will be removed from pool.
+	 * Don't forget to return it the pool ;
+	 * - to put item in pool (cache), use #putItem.
 	 *
 	 * @thread_safety
 	 * Thread-safe, synchronization (thread-lock) used.
 	 *
-	 * @USAGE:
-	 * - get item with #getItem. Item will be removed from pool (cache).
-	 * Returns null if no items found ;
-	 * - put item back in the pool with #putItem ;
-	 *
 	 * @note
-	 * - instead of shared_ptr, raw-pointer can be used for better performance ;
+	 * - smart-pointer are more preferred ;
 	 * - instead of erasing (removing) from collection of specific type,
 	 * it could be better to reset pointer-value instead, which can give
 	 * better performance if get/put called often ;
-	 * - instead of references for item-type, copy-constructor can be used, if
-	 * given value is small (char, enum, etc).
 	*/
 	template<typename K, typename V>
 	class MapPool final
@@ -59,6 +59,13 @@ namespace c0de4un
 		/* MapPool Destructor */
 		~MapPool( ) noexcept
 		{
+			// Release Collections
+			for ( map_t::iterator position_ = itemsMap.begin( ); position_ != itemsMap.end( ); position_++ )
+			{
+				// Delete Items Collection
+				if ( position_->second != nullptr )
+					delete position_->second;
+			}
 		}
 
 		// ===========================================================
@@ -70,44 +77,37 @@ namespace c0de4un
 		 *
 		 * @thread_safety - thread-safe, synchronization (thread-lock) used.
 		 * @param pKey - Item-Type.
-		 * @return item or null.
+		 * @return item or null, if none found.
 		*/
-		std::shared_ptr<V> getItem( const K & pKey ) noexcept
+		V getItem( const K & pType ) noexcept
 		{
-
 			// Lock
-			std::unique_lock<std::mutex> lock_l( itemsMutex );
+			std::unique_lock<std::mutex> lock_( itemsMutex );
 
-			// Get Items
-			std::shared_ptr<vector_t> itemsVector_sp( getItems( pKey, false ) );
+			// Get Items Collection
+			vector_t & itemsVector_ = getItems( pType );
 
-			// Get Item
-			std::shared_ptr<V> item_sp( getItem( itemsVector_sp ) );
-
-			// Return Item & Unlock
-			return( item_sp );
-
+			// Return null
+			return( getAnyItem( itemsVector_ ) );
 		}
 
 		/*
-		 * Puts item of given type.
+		 * Adds item.
 		 *
 		 * @thread_safety - thread-safe, synchronization (thread-lock) used.
 		 * @param pKey - Item-Type.
-		 * @param pItem - Item.
+		 * @param pItem - item.
 		*/
-		void putItem( const K & pKey, std::shared_ptr<V> pItem ) noexcept
+		void putItem( const K & pType, V pItem ) noexcept
 		{
-
 			// Lock
-			std::unique_lock<std::mutex> lock_l( itemsMutex );
+			std::unique_lock<std::mutex> lock_( itemsMutex );
 
-			// Get Items
-			std::shared_ptr<vector_t> itemsVector_sp( getItems( pKey, true ) ); // Create new vector_t if needed.
+			// Get Items Collection
+			vector_t & itemsVector_ = getItems( pType );
 
 			// Add Item to Collection
-			itemsVector_sp->push_back( pItem ); // For better performance, reusing shared_ptr without deletion can be better.
-
+			itemsVector_.push_back( pItem );
 		}
 
 		// -------------------------------------------------------- \\
@@ -121,10 +121,10 @@ namespace c0de4un
 		// ===========================================================
 
 		/* Type-Alias for vector */
-		using vector_t = std::vector<std::shared_ptr<V>>;
+		using vector_t = std::vector<V>;
 
 		/* Type-Alias for map */
-		using map_t = std::map<K, std::shared_ptr<vector_t>>;
+		using map_t = std::map<K, vector_t*>;
 
 		// ===========================================================
 		// Fields
@@ -151,70 +151,53 @@ namespace c0de4un
 		// ===========================================================
 
 		/*
-		 * Searches for items collection of given type.
+		 * Searches for any stored (cached) item.
 		 *
-		 * @thread_safety - not thread-safe, must be called inside of
-		 * the synchronization block (thread-lock).
-		 * @param pKey - Item-Type.
-		 * @param pAllocate - true to create new collection for given type, if none where found.
-		 * @return collection or null.
+		 * @thread_safety - must be called only from synchronization-block (thread-lock).
+		 * @return Item
 		*/
-		std::shared_ptr<vector_t> getItems( const K & pKey, const bool pAllocate ) noexcept
+		static V getAnyItem( vector_t & pItems ) noexcept
 		{
+			// Cancel
+			if ( pItems.empty( ) )
+				return( nullptr ); // V - must be convertible from null.
 
-			// Items Collection
-			std::shared_ptr<vector_t> items_sp( nullptr );
+			// Get Last Item from vector
+			V item_ = pItems.back( );
 
-			// Search position
-			const map_t::iterator position = itemsMap.find( pKey );
+			// Remove Last Item from vector
+			pItems.pop_back( );
 
-			// Get
-			if ( position == itemsMap.end( ) )
-			{
-				// Add new type
-				if ( pAllocate )
-				{
-					// Allocate using std::make_shared
-					items_sp = std::make_shared<vector_t>( );
-
-					// Register collection
-					itemsMap.insert( map_t::value_type( pKey, items_sp ) );
-				}
-			}
-			else
-				items_sp = position->second; // Copy-Constructor of smart-pointer
-
-			// Return items
-			return( items_sp );
-
+			// Return Item
+			return( item_ );
 		}
 
 		/*
-		 * Searches for item within collection.
+		 * Searches and, if required, allocates (creates 'new') collection
+		 * for items of given type.
 		 *
-		 * @thread_safety - not thread-safe, must be called inside of
-		 * the synchronization block (thread-lock).
-		 * @param itemsVector_sp - pointer to collection.
-		 * @return pointer to item or null if none found.
+		 * @param pType - Item-Type.
+		 * @return - 'reference' to collection of items.
 		*/
-		std::shared_ptr<V> getItem( std::shared_ptr<vector_t> & itemsVector_sp ) noexcept
+		inline vector_t & getItems( const K & pType ) noexcept
 		{
+			// Search
+			const map_t::iterator position_ = itemsMap.find( pType );
 
-			// Cancel
-			if ( itemsVector_sp->empty( ) )
-				return( nullptr );
+			// Return result
+			if ( position_ != itemsMap.end( ) )
+				return( * position_->second );
+			else
+			{// Not found
+				// Create new collection for given type
+				vector_t *const itemsVector_lp = new vector_t( );
 
-			// Get Back (Last) Item
-			std::shared_ptr<V> item_sp = itemsVector_sp->back( ); // Get reference
+				// Register (add, insert) new collection
+				itemsMap.insert( map_t::value_type( pType, itemsVector_lp ) );
 
-			// Copy pointer-value
-			std::shared_ptr<V> result_sp = std::move( item_sp ); // Transfer ownership
-
-			// Remove Item from Collection
-			itemsVector_sp->pop_back( );
-
-			// Return Item
-			return( result_sp );
+				// Return Collection
+				return( * itemsVector_lp );
+			}
 
 		}
 

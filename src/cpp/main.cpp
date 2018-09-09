@@ -26,12 +26,12 @@ int main( int argC, char** argV )
 	std::cout << "MapPool Example Started" << std::endl;
 
 	// Create MapPool with ObjectTypes
-	c0de4un::MapPool<c0de4un::ObjectTypes, c0de4un::BaseObject> objectsPool;
+	c0de4un::MapPool<c0de4un::ObjectTypes, std::shared_ptr<c0de4un::BaseObject>> objectsPool;
 
-	// Create Vehicle & Add to the Pool
+	// Create Vehicle and Add it to the pool
 	objectsPool.putItem( c0de4un::ObjectTypes::VEHICLE, std::make_shared<c0de4un::Vehicle>( ) );
 
-	// Create Tank & Add to the Pool
+	// Create Tank & Add it to the pool
 	objectsPool.putItem( c0de4un::ObjectTypes::TANK, std::make_shared<c0de4un::Tank>( ) );
 
 	// Get Vehicle
